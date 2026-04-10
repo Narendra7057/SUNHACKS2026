@@ -10,6 +10,7 @@ from agents.explainer_agent import ExplainerAgent
 from agents.fixer_agent import FixerAgent
 from agents.governance_agent import GovernanceAgent
 from agents.validator_agent import RiskEvaluationAgent
+from agents.domain_agent_factory import DomainAgentFactory
 from governance.anomaly_detector import OutputAnomalyDetector
 from observability.langsmith_trace import LangSmithTracer, trace_step
 from observability.telemetry import TelemetryLogger
@@ -157,30 +158,35 @@ class GovernanceController:
         raw_text = getattr(selected, "raw", None) or ""
         return _parse_json_output(raw_text, task_name)
 
-    def run_pipeline(self, clause: str) -> Dict[str, Any]:
+    def run_pipeline(self, input_data: str, domain: str = "legal") -> Dict[str, Any]:
         # End-to-end real execution path: CrewAI + Ollama + IsolationForest + LangSmith + OpenTelemetry.
+        # Now domain-aware for multi-domain support
         audit_trail: List[Dict[str, Any]] = []
         audit_log: Dict[str, List[Dict[str, Any]]] = {"issues": [], "actions": []}
 
-        # 1) Main Crew orchestration: contract analysis + semantic risk evaluation in one kickoff.
+        # Normalize domain
+        domain = domain.lower() if domain else "legal"
+        if not DomainAgentFactory.is_valid_domain(domain):
+            domain = "legal"
+
+        # Get domain-specific markers for rule-based detection
+        domain_markers = DomainAgentFactory.get_domain_markers(domain)
+        domain_config = DomainAgentFactory.get_domain_config(domain)
+
+        # 1) Main Crew orchestration: domain analysis + semantic risk evaluation in one kickoff.
+        # Use domain-specific prompts
+        analysis_prompt = DomainAgentFactory.get_domain_prompt(domain, input_data)
+        risk_prompt = DomainAgentFactory.get_risk_evaluation_prompt(domain, input_data)
+
         contract_task = Task(
-            name="contract_analysis",
-            description=(
-                "Analyze the contract clause and return JSON only with keys 'decision' and 'reasoning'. "
-                "decision must be exactly ACCEPTABLE or RISKY. reasoning must be concise.\n\n"
-                f"Clause:\n{clause}"
-            ),
+            name="analysis",
+            description=analysis_prompt,
             expected_output="JSON with decision and reasoning.",
             agent=self.contract_agent.agent,
         )
         risk_task = Task(
             name="risk_evaluation",
-            description=(
-                "Analyze fairness, detect liability removal, and detect one-sided clauses. "
-                "Return JSON only with keys 'risk_level' and 'reason'. "
-                "risk_level must be LOW, MODERATE, or HIGH.\n\n"
-                f"Clause:\n{clause}"
-            ),
+            description=risk_prompt,
             expected_output="JSON with risk_level and reason.",
             agent=self.risk_agent.agent,
             context=[contract_task],
@@ -190,17 +196,18 @@ class GovernanceController:
             tasks=[contract_task, risk_task],
             verbose=False,
         )
-        with self.telemetry.tracer.start_as_current_span("step_contract_and_risk") as span:
-            span.set_attribute("clause_length", len(clause))
+        with self.telemetry.tracer.start_as_current_span("step_analysis_and_risk") as span:
+            span.set_attribute("input_length", len(input_data))
+            span.set_attribute("domain", domain)
             main_result = main_crew.kickoff()
 
-        original = self._extract_task_output(main_result, "contract_analysis", 0)
+        original = self._extract_task_output(main_result, "analysis", 0)
         risk_result = self._extract_task_output(main_result, "risk_evaluation", 1)
 
-        trace_step("contract_analysis", {"clause": clause}, original)
-        self.tracer.trace_step("contract_analysis", {"clause": clause}, original)
-        trace_step("risk_evaluation", {"clause": clause}, risk_result)
-        self.tracer.trace_step("risk_evaluation", {"clause": clause}, risk_result)
+        trace_step("analysis", {"domain": domain, "input": input_data}, original)
+        self.tracer.trace_step("analysis", {"domain": domain, "input": input_data}, original)
+        trace_step("risk_evaluation", {"domain": domain, "input": input_data}, risk_result)
+        self.tracer.trace_step("risk_evaluation", {"domain": domain, "input": input_data}, risk_result)
 
         original_decision = str(original.get("decision", "")).strip().upper()
         if original_decision not in {"ACCEPTABLE", "RISKY"}:
@@ -209,10 +216,11 @@ class GovernanceController:
         original_output = {
             "decision": original_decision,
             "reasoning": str(original.get("reasoning", "No reasoning provided by agent.")).strip(),
+            "domain": domain,
         }
         audit_trail.append(self._audit_entry("Agent", original_output))
         self.telemetry.log_event("agent_decision", original_output)
-        self.telemetry.logger.info(f"Agent decision: {original_decision}")
+        self.telemetry.logger.info(f"Agent decision ({domain}): {original_decision}")
 
         risk_level = str(risk_result.get("risk_level", "")).strip().upper()
         if risk_level not in {"LOW", "MODERATE", "HIGH"}:
@@ -221,7 +229,7 @@ class GovernanceController:
 
         # 2) Real anomaly detection (Isolation Forest) from actual extracted text features.
         with self.telemetry.tracer.start_as_current_span("step_anomaly_detection"):
-            anomaly_result = self.anomaly_detector.detect(clause)
+            anomaly_result = self.anomaly_detector.detect(input_data)
         anomaly_detected = bool(anomaly_result["is_anomaly"])
         anomaly_prediction = int(anomaly_result.get("prediction", 1))
 
@@ -239,15 +247,9 @@ class GovernanceController:
         self.telemetry.logger.info(f"Anomaly detection result: {anomaly_detected}")
 
         # 4) Supervisor-layer detection using semantic risk + rules + anomaly.
-        liability_markers = [
-            "not liable",
-            "no liability",
-            "disclaims all liability",
-            "without notice",
-            "terminate immediately",
-        ]
-        clause_lower = clause.lower()
-        rule_triggered = any(marker in clause_lower for marker in liability_markers)
+        liability_markers = domain_markers
+        input_lower = input_data.lower()
+        rule_triggered = any(marker in input_lower for marker in liability_markers)
         mismatch_detected = original_decision == "ACCEPTABLE" and (system_risk in {"HIGH", "MODERATE"} or rule_triggered)
 
         error_detected = bool(mismatch_detected or anomaly_detected or (rule_triggered and system_risk != "LOW"))
@@ -324,18 +326,27 @@ class GovernanceController:
         self.telemetry.logger.info(f"Risk level: {system_risk}")
         self.telemetry.logger.info(f"Governance action: {governance_action}")
 
-                # 5) SELF-REPROMPT: always produce improved governed output.
+        # 5) SELF-REPROMPT: always produce improved governed output.
+        # Domain-specific reprompting
+        domain_context = {
+            "legal": "legal compliance and contract fairness",
+            "ecommerce": "product quality and fraud prevention",
+            "fintech": "credit risk and fraud detection",
+            "healthcare": "medical accuracy and patient safety",
+        }
+        context_text = domain_context.get(domain, "compliance and risk governance")
+
         if error_detected and issue:
-                        reprompt = f"""
-You are a strict legal compliance AI.
+            reprompt = f"""
+You are a strict {domain} compliance AI.
 
 Your previous decision was incorrect.
 
-Re-evaluate the contract considering:
+Re-evaluate the {context_text} considering:
 
-* liability clauses
-* fairness
-* business risk
+* key risk factors for {domain}
+* compliance requirements
+* business impact
 * compliance
 
 Return JSON only with keys:
@@ -391,9 +402,9 @@ Refinement mode: keep correctness, improve clarity, and standardize for audit.
 
 Original Output:
 {json.dumps(original_output)}
-""".strip()
 
-        corrected_prompt = f"{reprompt}\n\nContract Text:\n{clause}"
+Input Data:
+{input_data}"""
 
         correction_task = Task(
             name="correction",

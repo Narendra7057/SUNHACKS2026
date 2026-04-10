@@ -82,12 +82,28 @@ label {
 }
 
 textarea,
-input[type='file'] {
+input[type='file'],
+select {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 14px;
   padding: 12px;
   background: rgba(9, 15, 29, 0.55);
+  color: #fff;
+}
+
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg fill='white' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 20px;
+  padding-right: 36px;
+}
+
+select option {
+  background: #1a2240;
   color: #fff;
 }
 

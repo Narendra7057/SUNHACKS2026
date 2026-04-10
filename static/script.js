@@ -1,4 +1,5 @@
 const analyzeBtn = document.getElementById('analyzeBtn');
+const domainSelect = document.getElementById('domain');
 const clauseInput = document.getElementById('clause');
 const contractFileInput = document.getElementById('contractFile');
 const loadingEl = document.getElementById('loading');
@@ -24,6 +25,13 @@ const traceLangSmithEl = document.getElementById('traceLangSmith');
 const traceOpenTelemetryEl = document.getElementById('traceOpenTelemetry');
 const traceIsolationForestEl = document.getElementById('traceIsolationForest');
 
+const DOMAIN_INFO = {
+  legal: '⚖️ Legal - Contract Analysis',
+  ecommerce: '🛍️ E-commerce - Product Review',
+  fintech: '💰 Fintech - Loan Approval',
+  healthcare: '🏥 Healthcare - Diagnosis'
+};
+
 function safeText(value, fallback = '-') {
   if (value === null || value === undefined) {
     return fallback;
@@ -33,6 +41,8 @@ function safeText(value, fallback = '-') {
 }
 
 function buildHumanExplanation(data) {
+  const domain = safeText(data.domain, 'unknown');
+  const domainInfo = DOMAIN_INFO[domain] || domain;
   const originalDecision = safeText(data.original_output?.decision, 'UNKNOWN');
   const correctedDecision = safeText(data.corrected_output?.decision, 'UNKNOWN');
   const issue = data.issues_detected?.[0];
@@ -40,10 +50,10 @@ function buildHumanExplanation(data) {
   const detectionBasis = `Semantic risk=${safeText(data.risk_level)}; anomaly=${data.anomaly_detected ? 'detected' : 'not detected'}; governance action=${safeText(data.governance_action)}.`;
 
   return [
-    `ContractAnalysisAgent first reviewed the clause and produced ${originalDecision}.`,
+    `${domainInfo} Agent first reviewed the input and produced ${originalDecision}.`,
     `The supervisor found a governance concern: ${whatWasWrong}`,
     `Detection signals were combined in real time (${detectionBasis}) to determine if correction was needed.`,
-    `TrustGuard then triggered self-reprompting and FixerAgent produced the governed result: ${correctedDecision}.`,
+    `TrustGuard then triggered self-reprompting and the domain agent produced the governed result: ${correctedDecision}.`,
   ];
 }
 
@@ -69,11 +79,11 @@ function buildAuditSteps(data) {
       icon: '',
       title: 'Self-Reprompt',
       status: 'TRIGGERED',
-      details: 'Re-evaluated with strict legal compliance rules and audit standardization.',
+      details: 'Re-evaluated with strict compliance rules and audit standardization.',
     },
     {
       icon: '',
-      title: 'FixerAgent',
+      title: 'DomainAgent',
       status: 'SUCCESS',
       details: `Corrected to ${correctedDecision}`,
     },
@@ -89,7 +99,7 @@ function readFileAsText(file) {
   });
 }
 
-async function getContractInput() {
+async function getAnalysisInput() {
   const textValue = clauseInput.value.trim();
   const file = contractFileInput.files && contractFileInput.files[0];
 
@@ -103,10 +113,10 @@ async function getContractInput() {
   return textValue;
 }
 
-async function analyzeContract() {
-  const clause = await getContractInput();
-  if (!clause) {
-    alert('Please paste contract text or upload a .txt file.');
+async function analyzeInput() {
+  const input = await getAnalysisInput();
+  if (!input) {
+    alert('Please paste input or upload a .txt file.');
     return;
   }
 
@@ -115,12 +125,13 @@ async function analyzeContract() {
   resultEl.classList.remove('fade-in');
 
   try {
+    const domain = domainSelect.value || 'legal';
     const response = await fetch('/analyze', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ clause }),
+      body: JSON.stringify({ input, domain }),
     });
 
     const data = await response.json();
@@ -196,4 +207,4 @@ async function analyzeContract() {
   }
 }
 
-analyzeBtn.addEventListener('click', analyzeContract);
+analyzeBtn.addEventListener('click', analyzeInput);

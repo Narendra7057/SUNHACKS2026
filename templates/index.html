@@ -21,14 +21,23 @@
         </header>
 
         <section class="input-card card">
-          <h2>Contract Input</h2>
-          <label for="clause">Paste Contract Text</label>
+          <h2>Multi-Domain Analysis</h2>
+          
+          <label for="domain">Select Domain</label>
+          <select id="domain">
+            <option value="legal">⚖️ Legal - Contract Analysis</option>
+            <option value="ecommerce">🛍️ E-commerce - Product Review</option>
+            <option value="fintech">💰 Fintech - Loan Approval</option>
+            <option value="healthcare">🏥 Healthcare - Diagnosis</option>
+          </select>
+
+          <label for="clause">Paste Input</label>
           <textarea id="clause" rows="6">The company is not liable for any data loss.</textarea>
 
-          <label for="contractFile">Or Upload Contract File (.txt)</label>
+          <label for="contractFile">Or Upload File (.txt)</label>
           <input id="contractFile" type="file" accept=".txt,text/plain" />
 
-          <button id="analyzeBtn">Analyze Clause</button>
+          <button id="analyzeBtn">Analyze</button>
           <div id="loading" class="loading hidden">Analyzing governance pipeline...</div>
         </section>
 
