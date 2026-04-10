@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrustGuard AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="dashboard-shell">
+        <header class="hero card">
+          <h1>TrustGuard AI</h1>
+          <p class="subtitle">Autonomous Agent Governance & Observability Platform</p>
+        </header>
+
+        <section class="input-card card">
+          <h2>Contract Input</h2>
+          <label for="clause">Paste Contract Text</label>
+          <textarea id="clause" rows="6">The company is not liable for any data loss.</textarea>
+
+          <label for="contractFile">Or Upload Contract File (.txt)</label>
+          <input id="contractFile" type="file" accept=".txt,text/plain" />
+
+          <button id="analyzeBtn">Analyze Clause</button>
+          <div id="loading" class="loading hidden">Analyzing governance pipeline...</div>
+        </section>
+
+        <section id="result" class="result hidden">
+          <article id="govDecisionCard" class="gov-decision card">
+            <p class="label">Governance Decision</p>
+            <h2 id="governanceAction" class="decision-text">-</h2>
+            <span id="riskBadge" class="risk-badge">Risk: -</span>
+          </article>
+
+          <div class="grid two-col">
+            <article class="card result-item comparison">
+              <h3>Original Output </h3>
+              <p id="originalDecision">-</p>
+            </article>
+            <article class="card result-item comparison">
+              <h3>Corrected Output </h3>
+              <p id="correctedDecision">-</p>
+            </article>
+          </div>
+
+          <div class="grid two-col">
+            <article class="card result-item">
+              <h3>Impact Analysis</h3>
+              <p><strong>Severity:</strong> <span id="impactSeverity">-</span></p>
+              <p><strong>Business Risk:</strong> <span id="impactBusinessRisk">-</span></p>
+              <p><strong>Estimated Loss:</strong> <span id="impactEstimatedLoss">-</span></p>
+            </article>
+            <article class="card result-item">
+              <h3>Compliance Check</h3>
+              <p><strong>Status:</strong> <span id="complianceStatus">-</span></p>
+              <p><strong>Reason:</strong> <span id="complianceReason">-</span></p>
+              <p><strong>Trust Score:</strong> <span id="trustScore">-</span></p>
+            </article>
+          </div>
+
+          <article class="card result-item">
+            <h3>System Trace</h3>
+            <div class="trace-grid">
+              <div class="trace-row"><span class="trace-key">CrewAI</span><span id="traceCrewAI" class="trace-val">-</span></div>
+              <div class="trace-row"><span class="trace-key">Ollama</span><span id="traceOllama" class="trace-val">-</span></div>
+              <div class="trace-row"><span class="trace-key">LangSmith</span><span id="traceLangSmith" class="trace-val">-</span></div>
+              <div class="trace-row"><span class="trace-key">OpenTelemetry</span><span id="traceOpenTelemetry" class="trace-val">-</span></div>
+              <div class="trace-row"><span class="trace-key">IsolationForest</span><span id="traceIsolationForest" class="trace-val">-</span></div>
+            </div>
+          </article>
+
+          <article class="card result-item">
+            <h3>Explanation </h3>
+            <div id="explanation" class="explanation-body">-</div>
+            <p id="confidenceLine" class="confidence-line">System ensured AI reliability through autonomous correction and full audit traceability.</p>
+          </article>
+
+          <article class="card result-item">
+            <h3>Audit Timeline </h3>
+            <ul id="auditTimeline" class="timeline"></ul>
+            <pre id="auditLog" class="hidden">-</pre>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>

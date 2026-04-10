@@ -1,0 +1,10 @@
+flask
+crewai
+langchain
+langchain-community
+langchain-ollama
+ollama
+scikit-learn
+opentelemetry-api
+opentelemetry-sdk
+langsmith
